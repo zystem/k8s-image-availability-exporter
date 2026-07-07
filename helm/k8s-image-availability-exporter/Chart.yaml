@@ -1,0 +1,6 @@
+apiVersion: v2
+name: k8s-image-availability-exporter
+description: Prometheus exporter that checks Kubernetes workload image availability
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

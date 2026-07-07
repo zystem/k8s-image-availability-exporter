@@ -1,0 +1,94 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/zystem/k8s-image-availability-exporter
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+podAnnotations: {}
+podLabels: {}
+
+rbac:
+  create: true
+  readSecrets: true
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+env:
+  BIND_ADDRESS: "0.0.0.0"
+  EXPORTER_PORT: "9090"
+  REFRESH_INTERVAL_SECONDS: "60"
+  PROM_LITE_DATA_DIR: "/data"
+  NAMESPACE_LABEL: ""
+  IGNORED_IMAGES: ""
+  ALLOWED_IMAGES: ""
+  IMAGE_MIRRORS: ""
+  FORCE_CHECK_DISABLED_CONTROLLERS: ""
+  DEFAULT_REGISTRY: "index.docker.io"
+  ALLOW_PLAIN_HTTP: "false"
+  SKIP_REGISTRY_CERT_VERIFICATION: "false"
+  REGISTRY_CA_FILE: ""
+
+extraEnv: []
+
+podSecurityContext:
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: metrics
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: metrics
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 9090
+  annotations: {}
+
+podMonitor:
+  enabled: false
+  labels: {}
+  scrapeTimeout: "30s"
+  scrapeInterval: "60s"
+
+prometheusRule:
+  enabled: false
+  labels: {}
+  absentFor: "10m"
+  authFailureFor: "10m"
+  refreshFailureFor: "10m"
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

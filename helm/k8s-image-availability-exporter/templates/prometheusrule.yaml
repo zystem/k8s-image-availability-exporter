@@ -1,0 +1,46 @@
+{{- if .Values.prometheusRule.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "k8s-image-availability-exporter.fullname" . }}
+  labels:
+    {{- include "k8s-image-availability-exporter.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: k8s-image-availability-exporter.rules
+      rules:
+        - alert: K8sImageAbsent
+          expr: k8s_image_availability_exporter_absent == 1
+          for: {{ .Values.prometheusRule.absentFor }}
+          labels:
+            severity: warning
+          annotations:
+            summary: Kubernetes workload image is absent
+            description: Image {{`{{ $labels.image }}`}} used by {{`{{ $labels.kind }}`}}/{{`{{ $labels.name }}`}} in namespace {{`{{ $labels.namespace }}`}} is absent from its registry.
+        - alert: K8sImageRegistryAuthenticationFailure
+          expr: k8s_image_availability_exporter_authentication_failure == 1
+          for: {{ .Values.prometheusRule.authFailureFor }}
+          labels:
+            severity: warning
+          annotations:
+            summary: Kubernetes workload image registry authentication failed
+            description: Image {{`{{ $labels.image }}`}} used by {{`{{ $labels.kind }}`}}/{{`{{ $labels.name }}`}} in namespace {{`{{ $labels.namespace }}`}} could not be checked because registry authentication failed.
+        - alert: K8sImageRegistryAuthorizationFailure
+          expr: k8s_image_availability_exporter_authorization_failure == 1
+          for: {{ .Values.prometheusRule.authFailureFor }}
+          labels:
+            severity: warning
+          annotations:
+            summary: Kubernetes workload image registry authorization failed
+            description: Image {{`{{ $labels.image }}`}} used by {{`{{ $labels.kind }}`}}/{{`{{ $labels.name }}`}} in namespace {{`{{ $labels.namespace }}`}} could not be checked because registry authorization failed.
+        - alert: K8sImageAvailabilityExporterRefreshFailures
+          expr: increase(promlite_refresh_failures_total[{{ .Values.prometheusRule.refreshFailureFor }}]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: k8s-image-availability-exporter refresh is failing
+            description: The exporter failed to refresh its metrics cache recently.
+{{- end }}

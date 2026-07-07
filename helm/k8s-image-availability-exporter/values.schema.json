@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "replicaCount": { "type": "integer", "minimum": 1 },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": { "type": "string" },
+        "pullPolicy": { "type": "string" },
+        "tag": { "type": "string" }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "readSecrets": { "type": "boolean" }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "annotations": { "type": "object" },
+        "name": { "type": "string" }
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "properties": {
+        "BIND_ADDRESS": { "type": "string" },
+        "EXPORTER_PORT": { "type": "string", "pattern": "^[0-9]+$" },
+        "REFRESH_INTERVAL_SECONDS": { "type": "string" },
+        "PROM_LITE_DATA_DIR": { "type": "string" },
+        "NAMESPACE_LABEL": { "type": "string" },
+        "IGNORED_IMAGES": { "type": "string" },
+        "ALLOWED_IMAGES": { "type": "string" },
+        "IMAGE_MIRRORS": { "type": "string" },
+        "FORCE_CHECK_DISABLED_CONTROLLERS": { "type": "string" },
+        "DEFAULT_REGISTRY": { "type": "string" },
+        "ALLOW_PLAIN_HTTP": { "type": "string", "enum": ["true", "false", "1", "0", "yes", "no", "on", "off"] },
+        "SKIP_REGISTRY_CERT_VERIFICATION": { "type": "string", "enum": ["true", "false", "1", "0", "yes", "no", "on", "off"] },
+        "REGISTRY_CA_FILE": { "type": "string" }
+      }
+    },
+    "extraEnv": { "type": "array" },
+    "service": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "type": { "type": "string" },
+        "port": { "type": "integer" },
+        "annotations": { "type": "object" }
+      }
+    },
+    "podMonitor": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "labels": { "type": "object" },
+        "scrapeTimeout": { "type": "string" },
+        "scrapeInterval": { "type": "string" }
+      }
+    },
+    "prometheusRule": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "labels": { "type": "object" },
+        "absentFor": { "type": "string" },
+        "authFailureFor": { "type": "string" },
+        "refreshFailureFor": { "type": "string" }
+      }
+    }
+  }
+}
