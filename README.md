@@ -167,12 +167,17 @@ not support manifest `HEAD`.
 
 ## CI
 
-The GitHub Actions workflow in `.github/workflows/ci-release.yaml` runs:
+The Woodpecker pipeline in `.woodpecker.yml` runs:
 
 - `tests/run.sh`
-- `VERSION=ci ./build.sh`
+- `./build.sh`
 - `helm lint`
 - `helm template` with `PodMonitor` and `PrometheusRule` enabled
-- Docker multi-arch build and GHCR publish outside pull requests
-- Helm chart package and OCI publish on release tags
-- GitHub release asset upload on `v*` tags or manual release dispatch
+- Helm chart package
+- Docker multi-arch build and GHCR publish on `v*` tags
+- Helm chart OCI publish on `v*` tags
+- GitHub release asset upload on `v*` tags
+
+Release publishing uses Woodpecker's GitHub App credentials exposed through
+`CI_NETRC_USERNAME` and `CI_NETRC_PASSWORD`. The GitHub App must have permission
+to publish GHCR packages and manage releases.

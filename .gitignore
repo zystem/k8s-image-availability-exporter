@@ -1,2 +1,3 @@
 build/
+dist/
 tests/t_basic
