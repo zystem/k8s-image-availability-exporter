@@ -181,3 +181,10 @@ The Woodpecker pipeline in `.woodpecker.yml` runs:
 Release publishing uses Woodpecker's GitHub App credentials exposed through
 `CI_NETRC_USERNAME` and `CI_NETRC_PASSWORD`. The GitHub App must have permission
 to publish GHCR packages and manage releases.
+
+Docker image publishing uses `woodpeckerci/plugin-docker-buildx` and requires
+the Woodpecker agent to allow that privileged plugin, for example:
+
+```yaml
+WOODPECKER_PLUGINS_PRIVILEGED=woodpeckerci/plugin-docker-buildx
+```

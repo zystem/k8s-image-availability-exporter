@@ -1,3 +1,4 @@
 build/
 dist/
 tests/t_basic
+*-pipeline-*-metadata.json

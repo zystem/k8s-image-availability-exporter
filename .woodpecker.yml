@@ -5,6 +5,8 @@ steps:
       - apk add --no-cache gcc musl-dev openssl-dev git curl
       - nimble install -y yyjson@1.0.0 promlite@0.2.0 yaml@2.2.0
       - ./tests/run.sh
+    when:
+      - event: [push, pull_request, tag]
 
   build:
     image: nimlang/nim:2.2.4-alpine
@@ -18,6 +20,8 @@ steps:
       - sha256sum dist/k8s-image-availability-exporter-linux-amd64 > dist/k8s-image-availability-exporter-linux-amd64.sha256
     depends_on:
       - test
+    when:
+      - event: [push, pull_request, tag]
 
   helm:
     image: alpine/helm:3.15.4
@@ -29,6 +33,8 @@ steps:
         --set podMonitor.enabled=true
         --set prometheusRule.enabled=true
       - helm package helm/k8s-image-availability-exporter --destination build/helm
+    when:
+      - event: [push, pull_request, tag]
 
   publish_helm:
     image: alpine/helm:3.15.4
@@ -42,15 +48,23 @@ steps:
         ref: refs/tags/v*
 
   publish_image:
-    image: docker:27-cli
-    commands:
-      - echo "$CI_NETRC_PASSWORD" | docker login ghcr.io --username "$CI_NETRC_USERNAME" --password-stdin
-      - docker buildx create --use --name woodpecker-builder || docker buildx use woodpecker-builder
-      - docker buildx build --platform linux/amd64,linux/arm64 --build-arg VERSION="${CI_COMMIT_TAG#v}" --tag "ghcr.io/$CI_REPO:${CI_COMMIT_TAG#v}" --tag "ghcr.io/$CI_REPO:$CI_COMMIT_TAG" --tag "ghcr.io/$CI_REPO:latest" --push .
+    image: woodpeckerci/plugin-docker-buildx:5.2.0
+    settings:
+      registry: ghcr.io
+      repo: ghcr.io/${CI_REPO}
+      username: ${CI_NETRC_USERNAME}
+      password: ${CI_NETRC_PASSWORD}
+      platforms:
+        - linux/amd64
+        - linux/arm64
+      build_args:
+        - VERSION=${CI_COMMIT_TAG##v}
+      tags:
+        - ${CI_COMMIT_TAG##v}
+        - ${CI_COMMIT_TAG}
+        - latest
     depends_on:
       - build
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     when:
       - event: tag
         ref: refs/tags/v*
