@@ -167,7 +167,7 @@ not support manifest `HEAD`.
 
 ## CI
 
-The Woodpecker pipeline in `.woodpecker.yml` runs:
+The Woodpecker pipeline in `.woodpecker.yaml` runs:
 
 - `tests/run.sh`
 - `./build.sh`
