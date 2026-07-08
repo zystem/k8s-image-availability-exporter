@@ -2,7 +2,7 @@ steps:
   test:
     image: nimlang/nim:2.2.4-alpine
     commands:
-      - apk add --no-cache gcc musl-dev openssl-dev git curl
+      - apk add --no-cache gcc musl-dev openssl-dev pcre-dev git curl
       - nimble install -y yyjson@1.0.0 promlite@0.2.0 yaml@2.2.0
       - ./tests/run.sh
     when:
@@ -13,7 +13,7 @@ steps:
   build:
     image: nimlang/nim:2.2.4-alpine
     commands:
-      - apk add --no-cache gcc musl-dev openssl-dev git curl
+      - apk add --no-cache gcc musl-dev openssl-dev pcre-dev git curl
       - nimble install -y yyjson@1.0.0 promlite@0.2.0 yaml@2.2.0
       - ./build.sh
       - mkdir -p dist

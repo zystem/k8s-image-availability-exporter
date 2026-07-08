@@ -7,6 +7,7 @@ RUN apk add --no-cache \
     gcc \
     musl-dev \
     openssl-dev \
+    pcre-dev \
     git
 
 RUN nimble install -y \
@@ -27,7 +28,7 @@ RUN nim c \
 
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates curl
+RUN apk add --no-cache ca-certificates curl pcre
 
 RUN mkdir -p /data && chown 65534:65534 /data
 
