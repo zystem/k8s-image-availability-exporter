@@ -6,7 +6,9 @@ steps:
       - nimble install -y yyjson@1.0.0 promlite@0.2.0 yaml@2.2.0
       - ./tests/run.sh
     when:
-      - event: [push, pull_request, tag]
+      - event: push
+      - event: pull_request
+      - event: tag
 
   build:
     image: nimlang/nim:2.2.4-alpine
@@ -21,7 +23,9 @@ steps:
     depends_on:
       - test
     when:
-      - event: [push, pull_request, tag]
+      - event: push
+      - event: pull_request
+      - event: tag
 
   helm:
     image: alpine/helm:3.15.4
@@ -34,7 +38,9 @@ steps:
         --set prometheusRule.enabled=true
       - helm package helm/k8s-image-availability-exporter --destination build/helm
     when:
-      - event: [push, pull_request, tag]
+      - event: push
+      - event: pull_request
+      - event: tag
 
   publish_helm:
     image: alpine/helm:3.15.4
