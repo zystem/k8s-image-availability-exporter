@@ -1,31 +1,28 @@
 steps:
-  test:
+  build:
     image: nimlang/nim:2.2.4-alpine
     commands:
       - apk add --no-cache gcc musl-dev openssl-dev pcre-dev git curl
-      - nimble install -y yyjson@1.0.0 promlite@0.2.0 yaml@2.2.0
-      - ./tests/run.sh
+      - git config --global --add safe.directory "$CI_WORKSPACE"
+      - nimble install --depsOnly -y
+      - nimble test
+      - nimble release
     when:
       - event: push
       - event: pull_request
       - event: tag
 
-  build:
-    image: nimlang/nim:2.2.4-alpine
+  package_release:
+    image: alpine:3.22
     commands:
-      - apk add --no-cache gcc musl-dev openssl-dev pcre-dev git curl
-      - nimble install -y yyjson@1.0.0 promlite@0.2.0 yaml@2.2.0
-      - ./build.sh
       - mkdir -p dist
       - cp build/k8s-image-availability-exporter dist/k8s-image-availability-exporter-linux-amd64
-      - chmod +x dist/k8s-image-availability-exporter-linux-amd64
       - sha256sum dist/k8s-image-availability-exporter-linux-amd64 > dist/k8s-image-availability-exporter-linux-amd64.sha256
     depends_on:
-      - test
+      - build
     when:
-      - event: push
-      - event: pull_request
       - event: tag
+        ref: refs/tags/v*
 
   helm:
     image: alpine/helm:3.15.4
@@ -80,7 +77,7 @@ steps:
     commands:
       - GH_TOKEN="$CI_NETRC_PASSWORD" gh release create "$CI_COMMIT_TAG" dist/* --generate-notes --repo "$CI_REPO" --title "$CI_COMMIT_TAG" || GH_TOKEN="$CI_NETRC_PASSWORD" gh release upload "$CI_COMMIT_TAG" dist/* --clobber --repo "$CI_REPO"
     depends_on:
-      - build
+      - package_release
       - publish_helm
       - publish_image
     when:

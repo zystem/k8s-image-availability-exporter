@@ -11,22 +11,22 @@ Regular containers, init containers and ephemeral containers are checked.
 
 ## Build
 
-Install the published Nimble packages:
+Install dependencies:
 
 ```sh
-nimble install -y yyjson@1.0.0 promlite@0.2.0 yaml@2.2.0
+nimble install --depsOnly -y
 ```
 
-Build the release binary:
+Run only tests:
 
 ```sh
-./build.sh
+nimble test
 ```
 
-Run tests:
+Build only the release binary:
 
 ```sh
-tests/run.sh
+nimble release
 ```
 
 ## Configuration
@@ -169,8 +169,8 @@ not support manifest `HEAD`.
 
 The Woodpecker pipeline in `.woodpecker.yaml` runs:
 
-- `tests/run.sh`
-- `./build.sh`
+- `nimble install --depsOnly`, `nimble test` and `nimble release`
+- release artifact packaging and checksum generation on `v*` tags
 - `helm lint`
 - `helm template` with `PodMonitor` and `PrometheusRule` enabled
 - Helm chart package
