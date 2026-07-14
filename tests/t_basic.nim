@@ -2,7 +2,7 @@ import std/[base64, net, os, strutils, tables, unittest]
 
 import promlite
 
-import ../k8s_image_availability_exporter
+import ../src/k8s_image_availability_exporter
 
 const FakeRegistryPort = 18081
 const FakeFullFlowPort = 18082

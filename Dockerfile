@@ -10,12 +10,10 @@ RUN apk add --no-cache \
     pcre-dev \
     git
 
-RUN nimble install -y \
-    yyjson@1.0.0 \
-    promlite@0.2.0 \
-    yaml@2.2.0
+COPY k8s_image_availability_exporter.nimble .
+RUN nimble install --depsOnly -y
 
-COPY k8s_image_availability_exporter.nim .
+COPY src ./src
 
 RUN nim c \
     -d:release \
@@ -24,7 +22,7 @@ RUN nim c \
     --threads:on \
     --mm:orc \
     --out:/out/k8s-image-availability-exporter \
-    k8s_image_availability_exporter.nim
+    src/k8s_image_availability_exporter.nim
 
 FROM alpine:3.20
 
