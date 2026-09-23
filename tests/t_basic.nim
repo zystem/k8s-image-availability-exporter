@@ -178,6 +178,7 @@ suite "registry bearer challenge":
 
     var config = defaultConfig()
     config.allowPlainHttp = true
+    config.allowedRegistryHosts = @["127.0.0.1:" & $FakeRegistryPort]
     let auth = RegistryAuth(username: "robot", password: "s3cr3t")
     check checkWithAuth("127.0.0.1:" & $FakeRegistryPort & "/team/app:1", auth, config) == amAvailable
 
@@ -191,6 +192,7 @@ suite "registry bearer challenge":
     var config = defaultConfig()
     config.allowPlainHttp = true
     config.defaultRegistry = "127.0.0.1:" & $FakeFullFlowPort
+    config.allowedRegistryHosts = @[config.defaultRegistry]
     var ctx = CheckContext(
       config: config,
       kube: KubeClient(baseUrl: "http://127.0.0.1:" & $FakeFullFlowPort),
@@ -213,6 +215,7 @@ suite "registry bearer challenge":
 
     var config = defaultConfig()
     config.allowPlainHttp = true
+    config.allowedRegistryHosts = @["127.0.0.1:" & $FakeHeadFallbackPort]
     check checkWithAuth("127.0.0.1:" & $FakeHeadFallbackPort & "/team/app:1",
       RegistryAuth(), config) == amAvailable
 
@@ -253,6 +256,13 @@ suite "tls context reuse":
       discard cachedSslContext("/nonexistent/nim-exporter-ca.pem", "", "", false)
 
 suite "kubernetes api":
+  test "registry outbound allowlist uses exact hosts and explicit wildcards":
+    check registryAllowed("registry-1.docker.io", ["registry-1.docker.io"])
+    check registryAllowed("https://auth.docker.io/token", ["auth.docker.io"])
+    check registryAllowed("team.registry.example", ["*.registry.example"])
+    check not registryAllowed("registry.example.evil", ["registry.example"])
+    check not registryAllowed("127.0.0.1:8080", ["registry-1.docker.io"])
+
   test "builds paginated list paths":
     check listPathWithContinue("/api/v1/namespaces", "") == "/api/v1/namespaces?limit=500"
     check listPathWithContinue("/apis/apps/v1/deployments?labelSelector=a", "next/page") ==
@@ -318,10 +328,18 @@ users:
       if fileExists(path):
         removeFile(path)
 
-    let kube = loadKubeClientFromKubeconfig(path)
+    var kube = loadKubeClientFromKubeconfig(path)
+    defer: kube.close()
     check kube.caPath.len > 0
     check kube.certPath.len > 0
     check kube.keyPath.len > 0
     check fileExists(kube.caPath)
     check fileExists(kube.certPath)
     check fileExists(kube.keyPath)
+    check getFilePermissions(kube.caPath) == {fpUserRead, fpUserWrite}
+    check getFilePermissions(kube.certPath) == {fpUserRead, fpUserWrite}
+    check getFilePermissions(kube.keyPath) == {fpUserRead, fpUserWrite}
+    let generatedFiles = kube.tempFiles
+    kube.close()
+    for generatedFile in generatedFiles:
+      check not fileExists(generatedFile)

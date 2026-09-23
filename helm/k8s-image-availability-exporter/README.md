@@ -25,12 +25,13 @@ helm template k8s-image-availability-exporter ./helm/k8s-image-availability-expo
 | `image.repository` | `ghcr.io/zystem/k8s-image-availability-exporter` | Exporter image repository. |
 | `image.tag` | chart `appVersion` | Exporter image tag. |
 | `rbac.create` | `true` | Create ClusterRole and binding. |
-| `rbac.readSecrets` | `true` | Allow reading `imagePullSecrets`; keep enabled for private registries. |
+| `rbac.readSecrets` | `false` | Allow cluster-wide Secret reads for private registry credentials. Enable only after accepting this broad permission. |
 | `serviceAccount.create` | `true` | Create a ServiceAccount for the exporter. |
 | `env.REFRESH_INTERVAL_SECONDS` | `60` | Metrics refresh interval. |
 | `env.NAMESPACE_LABEL` | empty | Only scan namespaces with this label. |
 | `env.IGNORED_IMAGES` | empty | Tilde-separated image regexes to skip. |
 | `env.ALLOWED_IMAGES` | empty | Tilde-separated image regexes to include. |
+| `env.ALLOWED_REGISTRY_HOSTS` | `registry-1.docker.io~auth.docker.io` | Exact outbound hosts; a leading `*.` allows subdomains. |
 | `env.IMAGE_MIRRORS` | empty | Tilde-separated `original=mirror` image prefix mappings. |
 | `env.DEFAULT_REGISTRY` | `index.docker.io` | Registry for unqualified images. |
 | `env.ALLOW_PLAIN_HTTP` | `false` | Use HTTP for registry checks. |
@@ -43,14 +44,14 @@ Additional environment variables can be appended with `extraEnv`.
 
 ## Private Registries
 
-Private registry support depends on Kubernetes `imagePullSecrets`. With the
-default RBAC settings, the exporter reads ServiceAccounts and Secrets, extracts
-Docker auth data, follows registry Bearer challenges, and checks manifests with
-the same credentials the workload uses.
+Private registry support depends on Kubernetes `imagePullSecrets`. Secret reads
+are disabled by default because Kubernetes RBAC cannot limit them to pull
+secrets. Enabling `rbac.readSecrets` grants cluster-wide Secret reads.
 
-If `rbac.readSecrets=false`, the exporter can still scan public images, but
-private images that depend on `imagePullSecrets` will usually report
-authentication failures.
+The exporter can scan public images without Secret access. Private images that
+depend on `imagePullSecrets` will usually report authentication failures.
+Add private registry and separate bearer-token hosts to
+`env.ALLOWED_REGISTRY_HOSTS` before enabling their checks.
 
 ## Prometheus Operator
 

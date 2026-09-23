@@ -1,7 +1,7 @@
 FROM nimlang/nim:2.2.4-alpine AS builder
 
 WORKDIR /src
-ARG VERSION=0.1.0
+ARG VERSION=0.1.1
 
 RUN apk add --no-cache \
     gcc \
@@ -24,7 +24,7 @@ RUN nim c \
     --out:/out/k8s-image-availability-exporter \
     src/k8s_image_availability_exporter.nim
 
-FROM alpine:3.20
+FROM alpine:3.24
 
 RUN apk add --no-cache ca-certificates curl pcre
 

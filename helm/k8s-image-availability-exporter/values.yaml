@@ -13,7 +13,7 @@ podLabels: {}
 
 rbac:
   create: true
-  readSecrets: true
+  readSecrets: false
 
 serviceAccount:
   create: true
@@ -28,6 +28,7 @@ env:
   NAMESPACE_LABEL: ""
   IGNORED_IMAGES: ""
   ALLOWED_IMAGES: ""
+  ALLOWED_REGISTRY_HOSTS: "registry-1.docker.io~auth.docker.io"
   IMAGE_MIRRORS: ""
   FORCE_CHECK_DISABLED_CONTROLLERS: ""
   DEFAULT_REGISTRY: "index.docker.io"

@@ -37,6 +37,7 @@
         "NAMESPACE_LABEL": { "type": "string" },
         "IGNORED_IMAGES": { "type": "string" },
         "ALLOWED_IMAGES": { "type": "string" },
+        "ALLOWED_REGISTRY_HOSTS": { "type": "string", "minLength": 1 },
         "IMAGE_MIRRORS": { "type": "string" },
         "FORCE_CHECK_DISABLED_CONTROLLERS": { "type": "string" },
         "DEFAULT_REGISTRY": { "type": "string" },

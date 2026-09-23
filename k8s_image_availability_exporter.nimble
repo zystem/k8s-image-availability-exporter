@@ -2,7 +2,7 @@ import std/os
 
 # Package
 
-version       = "0.1.0"
+version       = "0.1.1"
 author        = "zystem"
 description   = "Prometheus exporter that checks Kubernetes workload image availability"
 license       = "MIT"

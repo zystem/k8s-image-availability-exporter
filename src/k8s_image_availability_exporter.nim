@@ -1,12 +1,12 @@
 import std/[base64, envvars, httpclient, net, options, os, re, sets, strutils,
-  tables, times, uri]
+  tables, tempfiles, times, uri]
 
 import promlite
 import yyjson
 import yaml/[dom, loading]
 
 const
-  Version* {.strdefine.} = "0.1.0"
+  Version* {.strdefine.} = "0.1.1"
   DefaultRegistry = "index.docker.io"
   DockerHubRegistry = "registry-1.docker.io"
   MetricsPrefix = "k8s_image_availability_exporter_"
@@ -27,6 +27,7 @@ The exporter is configured with environment variables:
   NAMESPACE_LABEL                      Only check namespaces that have this label (default: all)
   IGNORED_IMAGES                       Tilde-separated image regexes to skip
   ALLOWED_IMAGES                       Tilde-separated image regexes to include
+  ALLOWED_REGISTRY_HOSTS               Tilde-separated registry and auth hosts allowed for outbound requests
   IMAGE_MIRRORS                        Tilde-separated original=mirror image prefixes
   FORCE_CHECK_DISABLED_CONTROLLERS     Comma-separated kinds or *; deployment,statefulset,daemonset,cronjob
   DEFAULT_REGISTRY                     Registry used for unqualified images (default: index.docker.io)
@@ -50,6 +51,7 @@ type
     amAvailable = "available"
     amAbsent = "absent"
     amBadImageFormat = "bad_image_format"
+    amRegistryNotAllowed = "registry_not_allowed"
     amRegistryUnavailable = "registry_unavailable"
     amAuthenticationFailure = "authentication_failure"
     amAuthorizationFailure = "authorization_failure"
@@ -80,6 +82,7 @@ type
     registryCaPath*: string
     mirrors*: Table[string, string]
     forceKinds*: HashSet[string]
+    allowedRegistryHosts*: seq[string]
 
   KubeClient* = object
     baseUrl*: string
@@ -88,6 +91,7 @@ type
     certPath*: string
     keyPath*: string
     insecure*: bool
+    tempFiles*: seq[string]
 
   CheckContext* = object
     config*: Config
@@ -199,6 +203,27 @@ proc normalizeRegistryKey(key: string): string =
     return DockerHubRegistry
   value
 
+proc registryAuthority(value: string): string =
+  var candidate = value.strip().toLowerAscii()
+  if not candidate.contains("://"):
+    candidate = "https://" & candidate
+  let parsed = parseUri(candidate)
+  result = parsed.hostname.toLowerAscii()
+  if parsed.port.len > 0:
+    result.add(":" & parsed.port)
+
+proc registryAllowed*(registry: string; allowedHosts: openArray[string]): bool =
+  let authority = registryAuthority(registry)
+  if authority.len == 0:
+    return false
+  for entry in allowedHosts:
+    let allowed = registryAuthority(entry)
+    if authority == allowed:
+      return true
+    if allowed.startsWith("*.") and authority.endsWith(allowed[1 .. ^1]) and
+        authority.len > allowed.len - 1:
+      return true
+
 proc authMatches(authRegistry, imageRegistry: string): bool =
   let a = normalizeRegistryKey(authRegistry)
   let r = normalizeRegistryKey(imageRegistry)
@@ -253,9 +278,10 @@ proc cachedSslContext*(caPath, certPath, keyPath: string; insecure: bool): SslCo
     result = sslContextCache[key]
 
 proc newExporterHttpClient*(timeoutMs = 15000; token = ""; caPath = ""; certPath = "";
-    keyPath = ""; insecure = false): HttpClient =
+    keyPath = ""; insecure = false; maxRedirects = 5): HttpClient =
   let sslContext = cachedSslContext(caPath, certPath, keyPath, insecure)
-  result = httpclient.newHttpClient(timeout = timeoutMs, sslContext = sslContext)
+  result = httpclient.newHttpClient(timeout = timeoutMs, sslContext = sslContext,
+    maxRedirects = maxRedirects)
   result.headers = newHttpHeaders({"User-Agent": "k8s-image-availability-exporter/" & Version})
   if token.len > 0:
     result.headers["Authorization"] = "Bearer " & token
@@ -322,6 +348,23 @@ proc safeFileName(value: string): string =
   if result.len == 0:
     result = "default"
 
+proc writePrivateTempFile(prefix, suffix, contents: string): string =
+  let (file, path) = createTempFile(prefix, suffix)
+  try:
+    file.write(contents)
+  finally:
+    file.close()
+  result = path
+
+proc close*(kube: var KubeClient) =
+  for path in kube.tempFiles:
+    try:
+      if fileExists(path):
+        removeFile(path)
+    except OSError:
+      discard
+  kube.tempFiles.setLen(0)
+
 proc loadKubeClientFromKubeconfig*(path: string): KubeClient =
   if path.len == 0 or not fileExists(path):
     raise newException(ValueError, "KUBERNETES_SERVICE_HOST is not set and kubeconfig was not found: " & path)
@@ -345,8 +388,10 @@ proc loadKubeClientFromKubeconfig*(path: string): KubeClient =
   let caData = kubeconfigField(root, "clusters", clusterName,
     ["cluster", "certificate-authority-data"])
   if result.caPath.len == 0 and caData.len > 0:
-    result.caPath = getTempDir() / "k8s-image-availability-exporter-" & safeFileName(clusterName) & "-ca.crt"
-    writeFile(result.caPath, base64.decode(caData))
+    result.caPath = writePrivateTempFile(
+      "k8s-image-availability-exporter-" & safeFileName(clusterName) & "-", ".ca.crt",
+      base64.decode(caData))
+    result.tempFiles.add(result.caPath)
   result.insecure = kubeconfigNamedItem(root, "clusters", clusterName)
     .yamlPath(["cluster", "insecure-skip-tls-verify"]).yamlBool()
 
@@ -363,11 +408,15 @@ proc loadKubeClientFromKubeconfig*(path: string): KubeClient =
     let certData = kubeconfigField(root, "users", userName, ["user", "client-certificate-data"])
     let keyData = kubeconfigField(root, "users", userName, ["user", "client-key-data"])
     if result.certPath.len == 0 and certData.len > 0:
-      result.certPath = getTempDir() / "k8s-image-availability-exporter-" & safeFileName(userName) & "-client.crt"
-      writeFile(result.certPath, base64.decode(certData))
+      result.certPath = writePrivateTempFile(
+        "k8s-image-availability-exporter-" & safeFileName(userName) & "-", ".client.crt",
+        base64.decode(certData))
+      result.tempFiles.add(result.certPath)
     if result.keyPath.len == 0 and keyData.len > 0:
-      result.keyPath = getTempDir() / "k8s-image-availability-exporter-" & safeFileName(userName) & "-client.key"
-      writeFile(result.keyPath, base64.decode(keyData))
+      result.keyPath = writePrivateTempFile(
+        "k8s-image-availability-exporter-" & safeFileName(userName) & "-", ".client.key",
+        base64.decode(keyData))
+      result.tempFiles.add(result.keyPath)
 
 proc inClusterKubeClient(): KubeClient =
   let host = getEnv("KUBERNETES_SERVICE_HOST")
@@ -543,6 +592,8 @@ proc buildAuthIndex(ctx: var CheckContext; containers: seq[ContainerInfo]) =
   for ci in containers:
     let image = mirroredImage(ci.image, ctx.config.mirrors)
     let imageRef = parseImageRef(image, ctx.config.defaultRegistry)
+    if not registryAllowed(imageRef.registry, ctx.config.allowedRegistryHosts):
+      continue
     var auths: seq[RegistryAuth] = @[]
     for secretName in ci.pullSecretNames:
       auths.add(ctx.secretAuths(ci.namespace, secretName, imageRef.registry))
@@ -591,8 +642,9 @@ proc applyRegistryAuth(client: HttpClient; auth: RegistryAuth) =
     if token.len > 0:
       client.headers["Authorization"] = "Basic " & token
 
-proc requestBearerToken(realm, service, scope: string; auth: RegistryAuth; caPath: string; insecure: bool): Option[string] =
-  if realm.len == 0:
+proc requestBearerToken(realm, service, scope: string; auth: RegistryAuth;
+    config: Config): Option[string] =
+  if realm.len == 0 or not registryAllowed(realm, config.allowedRegistryHosts):
     return none(string)
   var url = realm
   var sep = if url.contains("?"): "&" else: "?"
@@ -601,7 +653,8 @@ proc requestBearerToken(realm, service, scope: string; auth: RegistryAuth; caPat
     sep = "&"
   if scope.len > 0:
     url.add(sep & "scope=" & encodeUrl(scope))
-  var client = newExporterHttpClient(caPath = caPath, insecure = insecure)
+  var client = newExporterHttpClient(caPath = config.registryCaPath,
+    insecure = config.skipRegistryCertVerification, maxRedirects = 0)
   defer: client.close()
   client.applyRegistryAuth(auth)
   let response = client.request(url, httpMethod = HttpGet)
@@ -632,7 +685,8 @@ proc classifyManifestResponse(response: Response): AvailabilityMode =
 proc newRegistryHttpClient(config: Config): HttpClient =
   result = newExporterHttpClient(
     caPath = config.registryCaPath,
-    insecure = config.skipRegistryCertVerification)
+    insecure = config.skipRegistryCertVerification,
+    maxRedirects = 0)
   result.headers["Accept"] = DockerV2ManifestAccept
 
 proc requestManifest(config: Config; url: string; auth: RegistryAuth;
@@ -656,6 +710,8 @@ proc requestManifest(config: Config; url: string; auth: RegistryAuth;
 proc checkWithAuth*(image: string; auth: RegistryAuth; config: Config): AvailabilityMode =
   let mirrored = mirroredImage(image, config.mirrors)
   let imageRef = parseImageRef(mirrored, config.defaultRegistry)
+  if not registryAllowed(imageRef.registry, config.allowedRegistryHosts):
+    return amRegistryNotAllowed
   let url = manifestUrl(imageRef, config.allowPlainHttp)
   let response = requestManifest(config, url, auth)
   case response.code
@@ -671,7 +727,7 @@ proc checkWithAuth*(image: string; auth: RegistryAuth; config: Config): Availabi
       let parts = parseAuthChallenge(challenge)
       let scope = parts.getOrDefault("scope", "repository:" & imageRef.repository & ":pull")
       let token = requestBearerToken(parts.getOrDefault("realm"), parts.getOrDefault("service"), scope,
-        auth, config.registryCaPath, config.skipRegistryCertVerification)
+        auth, config)
       if token.isSome:
         return classifyManifestResponse(requestManifest(config, url, auth, token.get()))
     return amAuthenticationFailure
@@ -818,6 +874,7 @@ proc defaultConfig*(): Config =
   result.defaultRegistry = DefaultRegistry
   result.mirrors = initTable[string, string]()
   result.forceKinds = initHashSet[string]()
+  result.allowedRegistryHosts = @[DockerHubRegistry, "auth.docker.io"]
 
 proc parseForceKinds(value: string): HashSet[string] =
   for part in value.split(','):
@@ -843,6 +900,9 @@ proc loadConfig*(): Config =
   result.registryCaPath = getEnv("REGISTRY_CA_FILE", "")
   result.ignoredImages = parseRegexEnv(getEnv("IGNORED_IMAGES", ""))
   result.allowedImages = parseRegexEnv(getEnv("ALLOWED_IMAGES", ""))
+  let allowedRegistryHosts = getEnv("ALLOWED_REGISTRY_HOSTS", "")
+  if allowedRegistryHosts.len > 0:
+    result.allowedRegistryHosts = splitEnvList(allowedRegistryHosts)
   result.mirrors = parseMirrorEnv(getEnv("IMAGE_MIRRORS", ""))
   result.forceKinds = parseForceKinds(getEnv("FORCE_CHECK_DISABLED_CONTROLLERS", ""))
 
@@ -857,7 +917,8 @@ proc main() =
     quit(2)
 
   var config = loadConfig()
-  let kube = inClusterKubeClient()
+  var kube = inClusterKubeClient()
+  defer: kube.close()
   var ctx = CheckContext(config: config, kube: kube, authByImage: initTable[string, seq[RegistryAuth]]())
   proc collector(m: var MetricsBuilder) {.gcsafe.} =
     {.cast(gcsafe).}:

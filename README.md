@@ -42,6 +42,7 @@ The exporter is configured with environment variables.
 | `NAMESPACE_LABEL` | empty | If set, only namespaces with this label are checked. |
 | `IGNORED_IMAGES` | empty | Tilde-separated image regexes to skip. |
 | `ALLOWED_IMAGES` | empty | Tilde-separated image regexes to include. |
+| `ALLOWED_REGISTRY_HOSTS` | `registry-1.docker.io~auth.docker.io` | Exact registry and token-service hosts allowed for outbound requests; a leading `*.` allows subdomains. |
 | `IMAGE_MIRRORS` | empty | Tilde-separated `original=mirror` image prefix mappings. |
 | `FORCE_CHECK_DISABLED_CONTROLLERS` | empty | Comma-separated controller kinds or `*`. Values are case-insensitive. |
 | `DEFAULT_REGISTRY` | `index.docker.io` | Registry used for unqualified images. |
@@ -69,15 +70,18 @@ The ServiceAccount needs cluster-wide read access to:
 
 - `namespaces`
 - `serviceaccounts`
-- `secrets`
 - `deployments`
 - `daemonsets`
 - `statefulsets`
 - `cronjobs`
 
-`secrets` access is required for private registries. Without it the exporter can
-still check public images, but images that rely on `imagePullSecrets` will report
-authentication failures.
+Secret access is disabled by default. Set `rbac.readSecrets=true` only when
+private registry credentials are required. Kubernetes RBAC cannot restrict this
+permission to pull secrets, so enabling it grants cluster-wide Secret reads.
+
+Registry and bearer-token requests are limited to `ALLOWED_REGISTRY_HOSTS`, and
+HTTP redirects are not followed. Add private registries and their separate
+authentication hosts explicitly.
 
 ## Helm
 
