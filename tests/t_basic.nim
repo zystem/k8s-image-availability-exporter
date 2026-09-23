@@ -1,4 +1,4 @@
-import std/[base64, net, os, strutils, tables, unittest]
+import std/[base64, httpclient, importutils, net, os, strutils, tables, unittest]
 
 import promlite
 
@@ -225,6 +225,32 @@ suite "usage":
     check "PROM_LITE_DATA_DIR" in UsageText
     check "KUBECONFIG" in UsageText
     check "imagePullSecrets" in UsageText
+
+suite "tls context reuse":
+  test "verified and insecure contexts are non-nil, distinct and reusable":
+    let a = cachedSslContext("", "", "", true)
+    check not a.isNil
+    check a == cachedSslContext("", "", "", true)
+    let verified = cachedSslContext("", "", "", false)
+    check not verified.isNil
+    check verified != a
+    check verified == cachedSslContext("", "", "", false)
+
+  test "repeated client creation does not create contexts":
+    privateAccess(HttpClientBase)
+    for insecure in [false, true]:
+      let before = cachedSslContext("", "", "", insecure)
+      for _ in 0 ..< 200:
+        let c = newExporterHttpClient(insecure = insecure)
+        check c.sslContext == before
+        check not c.sslContext.isNil
+        c.close()
+      check before == cachedSslContext("", "", "", insecure)
+
+  test "a cached insecure context cannot bypass invalid verified CA configuration":
+    discard cachedSslContext("", "", "", true)
+    expect IOError:
+      discard cachedSslContext("/nonexistent/nim-exporter-ca.pem", "", "", false)
 
 suite "kubernetes api":
   test "builds paginated list paths":

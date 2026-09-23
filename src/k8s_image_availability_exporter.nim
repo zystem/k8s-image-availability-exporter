@@ -232,16 +232,29 @@ proc dockerAuthsFromJson*(payload: string; imageRegistry: string): seq[RegistryA
         discard
     result.add(auth)
 
-proc newExporterHttpClient(timeoutMs = 15000; token = ""; caPath = ""; certPath = "";
-    keyPath = ""; insecure = false): HttpClient =
-  var sslContext: SslContext = nil
+type TlsContextKey = tuple[insecure: bool, caPath, certPath, keyPath: string]
+
+var sslContextCache {.threadvar.}: Table[TlsContextKey, SslContext]
+
+proc cachedSslContext*(caPath, certPath, keyPath: string; insecure: bool): SslContext =
+  ## HttpClient.close does not destroy a supplied SSL_CTX. Reuse one context
+  ## per TLS configuration and thread for the lifetime of the exporter.
+  ## Certificate files are loaded once; restart after replacing them.
   when defined(ssl):
-    if insecure:
-      sslContext = newContext(verifyMode = CVerifyNone, certFile = certPath, keyFile = keyPath)
-    elif caPath.len > 0:
-      sslContext = newContext(cafile = caPath, certFile = certPath, keyFile = keyPath)
-    elif certPath.len > 0 or keyPath.len > 0:
-      sslContext = newContext(certFile = certPath, keyFile = keyPath)
+    let key: TlsContextKey = (insecure, caPath, certPath, keyPath)
+    if key notin sslContextCache:
+      sslContextCache[key] =
+        if insecure:
+          newContext(verifyMode = CVerifyNone, certFile = certPath, keyFile = keyPath)
+        elif caPath.len > 0:
+          newContext(cafile = caPath, certFile = certPath, keyFile = keyPath)
+        else:
+          newContext(certFile = certPath, keyFile = keyPath)
+    result = sslContextCache[key]
+
+proc newExporterHttpClient*(timeoutMs = 15000; token = ""; caPath = ""; certPath = "";
+    keyPath = ""; insecure = false): HttpClient =
+  let sslContext = cachedSslContext(caPath, certPath, keyPath, insecure)
   result = httpclient.newHttpClient(timeout = timeoutMs, sslContext = sslContext)
   result.headers = newHttpHeaders({"User-Agent": "k8s-image-availability-exporter/" & Version})
   if token.len > 0:
