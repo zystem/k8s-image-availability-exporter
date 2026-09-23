@@ -31,6 +31,7 @@ RUN apk add --no-cache ca-certificates curl pcre
 RUN mkdir -p /data && chown 65534:65534 /data
 
 COPY --from=builder /out/k8s-image-availability-exporter /usr/local/bin/k8s-image-availability-exporter
+COPY LICENSE THIRD_PARTY_NOTICES /usr/share/licenses/k8s-image-availability-exporter/
 
 USER 65534:65534
 

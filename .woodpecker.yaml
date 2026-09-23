@@ -17,6 +17,7 @@ steps:
     commands:
       - mkdir -p dist
       - cp build/k8s-image-availability-exporter dist/k8s-image-availability-exporter-linux-amd64
+      - cp LICENSE THIRD_PARTY_NOTICES dist/
       - sha256sum dist/k8s-image-availability-exporter-linux-amd64 > dist/k8s-image-availability-exporter-linux-amd64.sha256
     depends_on:
       - build
@@ -27,6 +28,7 @@ steps:
   helm:
     image: alpine/helm:3.15.4
     commands:
+      - cp LICENSE helm/k8s-image-availability-exporter/LICENSE
       - helm lint helm/k8s-image-availability-exporter
       - >
         helm template k8s-image-availability-exporter helm/k8s-image-availability-exporter
@@ -93,3 +95,16 @@ steps:
     when:
       - event: tag
         ref: refs/tags/v*
+
+  renovate:
+    image: renovate/renovate:latest
+    commands:
+      - renovate "$CI_REPO"
+    environment:
+      RENOVATE_PLATFORM: github
+      RENOVATE_TOKEN:
+        from_secret: renovate_token
+    when:
+      - event: cron
+        cron: renovate
+      - event: manual
