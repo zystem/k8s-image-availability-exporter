@@ -41,8 +41,11 @@ steps:
 
   publish_helm:
     image: alpine/helm:3.15.4
+    environment:
+      GHCR_TOKEN:
+        from_secret: ghcr_token
     commands:
-      - echo "$CI_NETRC_PASSWORD" | helm registry login ghcr.io --username "$CI_NETRC_USERNAME" --password-stdin
+      - echo "$${GHCR_TOKEN}" | helm registry login ghcr.io --username "$CI_REPO_OWNER" --password-stdin
       - helm push build/helm/*.tgz "oci://ghcr.io/$CI_REPO_OWNER/charts"
     depends_on:
       - helm
@@ -55,8 +58,9 @@ steps:
     settings:
       registry: ghcr.io
       repo: ghcr.io/${CI_REPO}
-      username: ${CI_NETRC_USERNAME}
-      password: ${CI_NETRC_PASSWORD}
+      username: ${CI_REPO_OWNER}
+      password:
+        from_secret: ghcr_token
       platforms:
         - linux/amd64
         - linux/arm64
@@ -73,9 +77,15 @@ steps:
         ref: refs/tags/v*
 
   publish_release:
-    image: ghcr.io/cli/cli:2.74.2
-    commands:
-      - GH_TOKEN="$CI_NETRC_PASSWORD" gh release create "$CI_COMMIT_TAG" dist/* --generate-notes --repo "$CI_REPO" --title "$CI_COMMIT_TAG" || GH_TOKEN="$CI_NETRC_PASSWORD" gh release upload "$CI_COMMIT_TAG" dist/* --clobber --repo "$CI_REPO"
+    image: woodpeckerci/plugin-release:0.3.1
+    settings:
+      api-key:
+        from_secret: github_token
+      files:
+        - dist/*
+      file-exists: overwrite
+      generate-release-notes: true
+      title: ${CI_COMMIT_TAG}
     depends_on:
       - package_release
       - publish_helm
